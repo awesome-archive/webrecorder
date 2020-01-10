@@ -32,9 +32,11 @@ class UserManager(object):
 
     RESTRICTED_NAMES = ['login', 'logout', 'user', 'admin', 'manager', 'coll', 'collection',
                         'guest', 'settings', 'profile', 'api', 'anon', 'webrecorder',
-                        'anonymous', 'register', 'join', 'download', 'live', 'embed']
+                        'anonymous', 'register', 'join', 'download', 'live', 'embed', 'docs']
 
     PASS_RX = re.compile(r'^(?=.*[\d\W])(?=.*[a-z])(?=.*[A-Z]).{8,}$')
+
+    EMAIL_RX = re.compile(r'[\w./+-]+@[\w.-]+')
 
     LC_USERNAMES_KEY = 'h:lc_users'
 
@@ -210,6 +212,38 @@ class UserManager(object):
 
         return new_username
 
+    def get_authenticated_user(self, username, password):
+        """Returns the user matching the supplied username and password otherwise
+        returns None
+
+        :param str username: The username of the user
+        :param str password: The users password
+        :return: The authenticated user
+        :rtype: User|None
+        """
+        # first, authenticate the user
+        # if failing, see if case-insensitive username and try that
+        if not self.cork.is_authenticate(username, password):
+            username = self.find_case_insensitive_username(username)
+            if not username or not self.cork.is_authenticate(username, password):
+                return None
+        return self.all_users[username]
+
+    def login_user_no_cookie(self, username, password):
+        try:
+            authed_user = self.get_authenticated_user(username, password)
+        except Exception:
+            return None
+
+        if not authed_user:
+            return None
+
+        self.access.log_in(username, False)
+        sesh = self.get_session()
+        sesh.should_save = False
+        sesh.should_renew = False
+        return authed_user
+
     def login_user(self, input_data):
         """Authenticate users"""
         username = input_data.get('username', '')
@@ -220,22 +254,20 @@ class UserManager(object):
         except ValidationException as ve:
             return {'error': str(ve)}
 
+        user = self.get_authenticated_user(username, password)
         # first, authenticate the user
         # if failing, see if case-insensitive username and try that
-        if not self.cork.is_authenticate(username, password):
-            username = self.find_case_insensitive_username(username)
-            if not username or not self.cork.is_authenticate(username, password):
-                return {'error': 'invalid_login'}
+        if not user:
+            return {'error': 'invalid_login'}
 
         # if not enough space, don't continue with login
         if move_info:
-            if not self.has_space_for_new_collection(username,
+            if not self.has_space_for_new_collection(user.my_id,
                                                      move_info['from_user'],
                                                     'temp'):
                 #return {'error': 'Sorry, not enough space to import this Temporary Collection into your account.'}
                 return {'error': 'out_of_space'}
 
-        user = self.all_users[username]
         new_collection = None
 
         try:
@@ -248,11 +280,13 @@ class UserManager(object):
         remember_me = get_bool(input_data.get('remember_me'))
 
         # login session and access system
-        self.access.log_in(username, remember_me)
+        self.access.log_in(user.my_id, remember_me)
 
         user.update_last_login()
 
-        return {'success': '1', 'new_coll_name': new_collection.name if new_collection else None}
+        return {'success': '1',
+                'new_coll_name': new_collection.name if new_collection else None,
+                'user': user}
 
     def logout(self):
         sesh = self.get_session()
@@ -331,10 +365,15 @@ class UserManager(object):
     def get_roles(self):
         return [x for x in self.cork._store.roles]
 
-    def get_user_coll(self, username, coll_name):
+    def get_user(self, username):
         try:
-            user = self.all_users[username]
+            return self.all_users[username]
         except:
+            return None
+
+    def get_user_coll(self, username, coll_name):
+        user = self.get_user(username)
+        if not user:
             return None, None
 
         collection = user.get_collection_by_name(coll_name)
@@ -526,7 +565,7 @@ class UserManager(object):
 
         # EMAIL
         # validate email
-        if not re.match(r'[\w.-/+]+@[\w.-]+.\w+', email):
+        if not re.match(self.EMAIL_RX, email):
             errs.append('valid email required!')
 
         if email in [data['email_addr'] for u, data in self.all_users.items()]:
@@ -566,6 +605,7 @@ class UserManager(object):
 
         return None, self.create_new_user(username, {'email': email,
                                                      'name': name})
+
     def create_user_from_reg(self, reg, username):
         user, init_info = self.cork.validate_registration(reg, username)
 
@@ -612,13 +652,20 @@ class UserManager(object):
         if 'role' in data:
             user['role'] = data['role']
 
+        if 'customer_id' in data:
+            user['customer_id'] = data['customer_id']
+
+        if 'customer_max_size' in data:
+            user['customer_max_size'] = data['customer_max_size']
+
         return None
 
     def delete_user(self, username):
-        user = self.all_users[username]
-        if self.access.session_user != user:
-            if not self.access.is_superuser():
-                return False
+        try:
+            user = self.all_users[username]
+            self.access.assert_is_curr_user(user)
+        except Exception:
+            return False
 
         if self.mailing_list and self.remove_on_delete:
             self.remove_from_mailing_list(user['email_addr'])
@@ -626,7 +673,10 @@ class UserManager(object):
         # remove user and from all users table
         del self.all_users[username]
 
-        self.get_session().delete()
+        try:
+            self.get_session().delete()
+        except Exception:
+            pass
 
         return True
 
@@ -811,8 +861,10 @@ class CLIUserManager(UserManager):
         """
         if username not in self.all_users:
             print("User {username} does not exist".format(username=username))
+            return False
         else:
             print("User {username} exists".format(username=username))
+            return True
 
     def delete_user(self):
         """Remove a user from the system"""

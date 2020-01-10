@@ -1,10 +1,33 @@
 @import 'src/vars';
 
 .wr-coll-meta {
-    margin-top: 5rem;
+    margin-top: 3.5rem;
 
     button + button {
         margin-left: 1.6rem;
+    }
+}
+
+.collection-start-form {
+
+    & > h4 {
+        margin-top: 0;
+        padding-left: 1.5rem;
+    }
+
+    .start-recording-homepage > div {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .start-form:after {
+        content: '';
+        display: block;
+        width: 100%;
+        border: solid .1rem $black;
+        border-width: 0 0 .1rem 0;
+        padding-top: 3.5rem;
+        margin-bottom: 3.5rem;
     }
 }
 
@@ -31,6 +54,20 @@ a.collection-title:hover {
 .collections-index-nav {
     margin: 1rem 0;
 
+    h4 {
+        display: inline-block;
+    }
+
+    &.desktop {
+        button {
+            float: right;
+        }
+    }
+
+    button + button {
+        margin-right: .5rem;
+    }
+
     .btn-default:hover {
         background: rgba(0,0,0,0);
     }
@@ -48,17 +85,26 @@ a.collection-title:hover {
 }
 
 .collection-description {
-    margin-top:4.5rem;
+    margin-top: 3.5rem;
 
     .collection-username {
         font-size: 1.8rem;
         color: $gray550;
         margin: 0 auto;
+
+        .glyphicon {
+            font-size: 1.1rem;
+        }
     }
 
     .wr-editor {
         color: $gray550;
         max-width: 35rem;
+        word-break: break-word;
+
+        &:not(.click-to-edit) > div {
+            width: 100%;
+        }
 
         * {
             max-width: 35rem;
@@ -67,11 +113,26 @@ a.collection-title:hover {
         .public-DraftEditor-content {
             font-size: 1.2rem;
         }
+
+        .DraftEditor-editorContainer {
+            max-height: inherit;
+        }
+    }
+
+    .wr-editor-readonly {
+        width: 100%;
+        word-break: break-word;
     }
 
     .wr-inline-editor {
+        margin-top: 0 !important;
         line-height: 1;
         color: $gray550;
+        width: 100%;
+
+        h2 {
+            margin-top: 0;
+        }
 
         .glyphicon {
             color: $gray500;
@@ -104,6 +165,7 @@ a.collection-title:hover {
         font-weight: normal;
         margin-bottom: 0;
         font-size: 3.4rem;
+        word-break: break-word;
     }
 }
 
@@ -154,6 +216,7 @@ a.collection-title:hover {
             padding: 0.6rem 2rem;
             color: $gray550;
             text-decoration: none;
+            background: $white;
         }
 
         .rounded + .rounded {
@@ -230,10 +293,6 @@ a.collection-title:hover {
         }
     }
 
-
-    .collection-description .wr-coll-meta {
-        margin-top: 3.5rem;
-    }
     .collection-list li.has-description {
         .collection-list-size span {
             padding: 0.7rem 0;

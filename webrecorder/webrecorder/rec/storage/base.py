@@ -6,9 +6,10 @@ class BaseStorage(object):
     :ivar str storage_root: root directory
     """
 
-    def __init__(self):
+    def __init__(self, storage_root=None):
         """Initialize Webrecorder storage."""
         self.cache = {}
+        self.storage_root = storage_root
 
     def get_collection_url(self, collection):
         """Return collection URL.
@@ -108,10 +109,43 @@ class BaseStorage(object):
         :returns: whether successful or not
         :rtype: bool
         """
+        if not filename:
+            return False
+
         target_url = self.client_url_to_target_url(filename)
 
         if not target_url or not self.is_valid_url(target_url):
             return False
 
         return self.do_delete(target_url, filename)
+
+    def get_checksum_and_size(self, filepath_or_url):
+        """Returns the checksum of the supplied URL or filepath and the size of the resource
+
+        :param str filepath_or_url: The URL or filepath to the resource that the checksum and size is desired for
+        :return: A three tuple containing the kind of checksum, the checksum itself, and size
+        :rtype: tuple[str|None, str|None, int|None]
+        """
+        return None, None, None
+
+    def get_remote_presigned_url(self, url, expires=3600):
+        """Returns a remote presigned URL for direct, validating access to resource
+        from remote source. Optional, only valid for remote storage (eg. S3)
+
+        :param str url: The URL to the resource from remote source
+        :param int expires: The number of seconds the presigned url is valid for
+        :return: A presigned url for downloading the supplied URL from remote source
+        :rtype: str|None
+        """
+        return None
+
+    def do_delete(self, target_url, client_url):
+        """Delete file from storage.
+
+        :param str target_url: target URL
+        :param str client_url: client URL
+        :returns: whether successful or not
+        :rtype: bool
+        """
+        return True
 

@@ -1,5 +1,7 @@
 import HttpStatus from 'components/HttpStatus';
-import { FAQ, TermsAndPolicies } from 'components/siteComponents';
+import { ApiDocs, Documentation, FAQ, TermsAndPolicies } from 'components/siteComponents';
+import { product } from 'config';
+
 import {
   collDetailBreadcrumb,
   collList,
@@ -12,6 +14,8 @@ import {
   CollectionManagement,
   Extract,
   Home,
+  ListDetail,
+  Login,
   Logout,
   NewPassword,
   NewRecording,
@@ -20,9 +24,13 @@ import {
   Record,
   RegisterAccount,
   Replay,
-  UserSignup,
-  UserSettings
+  UserSignup
 } from './containers';
+
+
+const SettingsUI = __DESKTOP__ ?
+  require('containers/DesktopSettings/DesktopSettings') :
+  require('containers/UserSettings/UserSettings');
 
 
 const userPath = '/:user([^_][A-Za-z0-9-_]+)';
@@ -39,7 +47,7 @@ const userRoutes = [
   {
     path: `${userPath}/_settings`,
     breadcrumb: 'Settings',
-    component: UserSettings,
+    component: SettingsUI,
     exact: true,
     footer: true,
     name: 'settings'
@@ -50,19 +58,19 @@ const userRoutes = [
     classOverride: '',
     component: CollectionCover,
     exact: true,
-    footer: true,
+    footer: false,
     getLocation: ({ user, coll }) => {
       return `/${user}/${coll}`;
     },
     name: 'collectionCover'
   },
   {
-    path: `${userPath}/:coll/index`,
-    breadcrumb: 'Collection Index',
+    path: `${userPath}/:coll/manage`,
     classOverride: 'direction-override',
     component: CollectionDetail,
     exact: true,
     footer: false,
+    managementView: true,
     name: 'collectionPages'
   },
   {
@@ -72,23 +80,32 @@ const userRoutes = [
     component: CollectionManagement,
     exact: true,
     footer: true,
+    managementView: false,
     name: 'collectionMgmt'
   },
   {
     path: `${userPath}/:coll/list/:list`,
     breadcrumb: listDetailBreadcrumb,
-    classOverride: 'direction-override',
-    component: CollectionDetail,
+    component: ListDetail,
     exact: true,
     footer: false,
     getLocation: ({ user, coll, list }) => {
       return `/${user}/${coll}/list/${list}`;
     },
     name: 'collectionDetailList'
+  },
+  {
+    path: `${userPath}/:coll/list/:list/manage`,
+    classOverride: 'direction-override',
+    component: CollectionDetail,
+    exact: true,
+    footer: false,
+    managementView: true,
+    name: 'collectionDetailListManager'
   }
 ];
 
-const controllerRoutes = [
+const captureRoutes = [
   {
     path: `${userPath}/:coll/$new`,
     breadcrumb: 'New Session',
@@ -106,7 +123,7 @@ const controllerRoutes = [
     component: Record,
     exact: true,
     footer: false,
-    getLocation: ({ user, coll, rec }) => `/${user}/${coll}?filter=${rec}`,
+    getLocation: ({ user, coll, rec }) => `/${user}/${coll}/manage?filter=${rec}`,
     name: 'rb record'
   },
   {
@@ -116,7 +133,7 @@ const controllerRoutes = [
     component: Record,
     exact: true,
     footer: false,
-    getLocation: ({ user, coll, rec }) => `/${user}/${coll}/index?filter=${rec}`,
+    getLocation: ({ user, coll, rec }) => `/${user}/${coll}/manage?filter=${rec}`,
     name: 'record'
   },
   {
@@ -154,7 +171,26 @@ const controllerRoutes = [
     exact: true,
     footer: false,
     name: 'extract'
-  },
+  }
+]
+
+if (__DESKTOP__) {
+  const Live = require('containers/Live/Live');
+  // live browser pepare (for desktop)
+  captureRoutes.push(
+    {
+      path: `${userPath}/:coll/live/:splat(.*)`,
+      breadcrumb: 'Live',
+      classOverride: '',
+      component: Live,
+      exact: true,
+      footer: false,
+      name: 'live prepare'
+    }
+  );
+}
+
+const replayRoutes = [
   {
     path: `/:embed(_embed|_embed_noborder)${userPath}/:coll/list/:listSlug/b:bookmarkId([0-9]+)/:ts([0-9]+)?$br::br([a-z0-9-:]+)/:splat(.*)`,
     classOverride: '',
@@ -241,6 +277,19 @@ const infoRoutes = [
     exact: true,
     footer: true,
     name: 'Terms & Policies'
+  },
+  {
+    path: '/docs',
+    component: Documentation,
+    name: 'apidocs',
+    exact: true,
+  },
+  {
+    breadcrumb: 'Webrecorder API Docs',
+    path: '/docs/api',
+    component: ApiDocs,
+    name: 'apidocs',
+    exact: true,
   }
 ];
 
@@ -248,8 +297,8 @@ export default [
   /* core */
   {
     path: '/',
-    breadcrumb: 'Webrecorder',
     component: Home,
+    name: 'landing',
     exact: true,
     footer: true
   },
@@ -286,6 +335,14 @@ export default [
     name: 'Password Reset'
   },
   {
+    path: '/_login',
+    breadcrumb: `Log in to ${product}`,
+    component: Login,
+    exact: true,
+    footer: true,
+    name: 'login'
+  },
+  {
     path: '/_logout',
     breadcrumb: 'Logging out..',
     component: Logout,
@@ -296,7 +353,8 @@ export default [
 
   ...infoRoutes,
   ...userRoutes,
-  ...controllerRoutes.map(o => ({ ...o, noShadow: true })),
+  ...captureRoutes,
+  ...replayRoutes,
 
   {
     path: '/(.*)',

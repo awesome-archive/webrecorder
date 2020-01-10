@@ -2,8 +2,9 @@ version: '2'
 
 services:
     app:
+        container_name: app
         build: ./webrecorder
-        command: uwsgi /code/apps/apiapp.ini
+        command: ulimit -n 65536; uwsgi --need-app /code/apps/apiapp.ini
 
         env_file:
             - ./wr.env
@@ -17,14 +18,16 @@ services:
 
         volumes:
             - ./webrecorder/:/code/
-            - ./webrecorder/proxy-certs:/code/proxy-certs
             - ./data:/data
 
         networks:
             - default
             - browsers
 
+        ulimits: { nofile: 65536 }
+
     frontend:
+        container_name: frontend
         build:
             context: ./frontend
 
@@ -44,6 +47,7 @@ services:
             - 8096:8096 # for HMR on dev
 
     dat:
+        container_name: dat
         image: webrecorder/dat-share
         environment:
             - PORT=3282
@@ -58,8 +62,9 @@ services:
             - ./data/dat/secret_keys:/root/.dat/secret_keys
 
     recorder:
+        container_name: recorder
         build: ./webrecorder
-        command: uwsgi /code/apps/rec.ini
+        command: ulimit -n 65536; uwsgi --need-app /code/apps/rec.ini
 
         env_file:
             - ./wr.env
@@ -72,9 +77,12 @@ services:
             - ./webrecorder/:/code/
             - ./data:/data
 
+        ulimits: { nofile: 65536 }
+
     warcserver:
+        container_name: warcserver
         build: ./webrecorder
-        command: uwsgi /code/apps/load.ini
+        command: ulimit -n 65536; uwsgi --need-app /code/apps/load.ini
 
         env_file:
             - ./wr.env
@@ -86,12 +94,16 @@ services:
             - ./webrecorder/:/code/
             - ./data:/data
 
+        ulimits: { nofile: 65536 }
+
     nginx:
+        container_name: nginx
         build: ./nginx
         image: webrecorder/nginx
         depends_on:
             - app
             - frontend
+            - behaviors
 
         volumes:
             - ./data:/data
@@ -102,10 +114,13 @@ services:
             - 8089:80
             - 8092:81
 
-    shepherd:
-        image: oldwebtoday/shepherd
+    behaviors:
+      container_name: behaviors
+      image: "webrecorder/behaviors:latest"
 
-        command: uwsgi uwsgi.ini --mount /api/browsers=/shepherd/main.py
+    shepherd:
+        container_name: shepherd
+        image: oldwebtoday/shepherd:1.1.0
 
         env_file:
             - ./wr.env
@@ -118,13 +133,14 @@ services:
             - PROXY_PORT=8088
             - PROXY_GET_CA=http://wsgiprox/download/pem
 
-            - CLUSTER_NAME=wr_users
-            - NETWORK_NAME=webrecorder_browsers
-
-            - AUDIO_TYPE=opus
-
             - CONTAINER_EXPIRE_SECS=3600
             - IDLE_TIMEOUT=120
+
+            - BROWSER_NET=webrecorder_browsers
+            - MAIN_NET=webrecorder_default
+
+        ports:
+            - 9020:9020
 
         depends_on:
             - redis
@@ -134,6 +150,7 @@ services:
 
 
     redis:
+        container_name: redis
         build: ./redis
 
         env_file:
@@ -144,6 +161,7 @@ services:
 
     # Postfix (if sending mail locally)
     mailserver:
+        container_name: mailserver
         restart: always
         image: catatnight/postfix
 

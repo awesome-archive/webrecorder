@@ -3,23 +3,25 @@ import PropTypes from 'prop-types';
 import { Alert } from 'react-bootstrap';
 
 import WebSocketHandler from 'helpers/ws';
-import { deleteStorage, getStorage, remoteBrowserMod, setStorage } from 'helpers/utils';
+import { getStorage } from 'helpers/utils';
 
-import { createRemoteBrowser } from 'redux/modules/remoteBrowsers';
+import { toggleAutopilot } from 'store/modules/automation';
+import { createRemoteBrowser } from 'store/modules/remoteBrowsers';
+
+import { publicIP } from 'config';
 
 import './style.scss';
 
-const CBrowser = __CLIENT__ && require('shepherd-client/lib/browser').default;
+const CBrowser = !__DESKTOP__ && !__PLAYER__ && __CLIENT__ && require('shepherd-client/src/browser').default;
 
 
 class RemoteBrowserUI extends Component {
-
   static contextTypes = {
     currMode: PropTypes.string
   };
 
   static propTypes = {
-    autoscroll: PropTypes.bool,
+    behavior: PropTypes.string,
     clipboard: PropTypes.bool,
     contentFrameUpdate: PropTypes.bool,
     creating: PropTypes.bool,
@@ -58,20 +60,21 @@ class RemoteBrowserUI extends Component {
     this.state = {
       countdownLabel: false,
       dismissCountdown: false,
-      coutdown: '',
       message: '',
       messageSet: false
     };
 
     this.pywbParams = {
-      audio: 1,
+      audio: "wait_for_click",
       static_prefix: '/static/',
       api_prefix: '/api/browsers',
       clipboard: '#clipboard',
       fill_window: true,
       on_countdown: this.onCountdown,
       on_event: this.onEvent,
-      headers: { 'x-requested-with': 'XMLHttpRequest' }
+      headers: { 'x-requested-with': 'XMLHttpRequest' },
+      webrtc: true,
+      webrtcHostIP: publicIP,
     };
   }
 
@@ -96,8 +99,10 @@ class RemoteBrowserUI extends Component {
   }
 
   componentDidUpdate(prevProps) {
-    const { autoscroll, clipboard, dispatch, inactiveTime, contentFrameUpdate,
-            params, rb, rec, reqId, timestamp, url } = this.props;
+    const {
+      behavior, clipboard, dispatch, inactiveTime, contentFrameUpdate,
+      params, rb, rec, reqId, timestamp, url
+    } = this.props;
 
     // bidirectional clipboard
     if (clipboard !== prevProps.clipboard && this.cb) {
@@ -108,11 +113,14 @@ class RemoteBrowserUI extends Component {
       }
     }
 
-    // autoscroll check
-    if (autoscroll !== prevProps.autoscroll && this.socket) {
-      this.socket.doAutoscroll();
+    // behavior check
+    if (behavior !== prevProps.behavior && this.socket) {
+      this.socket.doBehavior(url, behavior);
     }
 
+    if (url != prevProps.url) {
+      this.socket.setRemoteUrl(url);
+    }
 
     if (reqId !== prevProps.reqId) {
       // new reqId for browser, initialize and save
@@ -182,7 +190,11 @@ class RemoteBrowserUI extends Component {
   }
 
   onEvent = (type, data) => {
-    const { dispatch, rb, params, rec, timestamp, url } = this.props;
+    const { autopilotStatus, dispatch, rb, params, rec, timestamp, url } = this.props;
+
+    if (autopilotStatus === 'running' && ['expire', 'fail', 'error'].includes(type)) {
+      dispatch(toggleAutopilot(null, 'stopped', this.props.url));
+    }
 
     if (type === 'connect') {
       this.setState({ message: '' });
@@ -225,7 +237,7 @@ class RemoteBrowserUI extends Component {
     this.pywbParams.inactiveSecs = inactiveTime;
 
     // set up socket
-    this.socket = new WebSocketHandler(params, currMode, dispatch, true, reqId);
+    this.socket = new WebSocketHandler(params, currMode, dispatch, true, reqId, '');
 
     this.expired = false;
 
@@ -246,8 +258,8 @@ class RemoteBrowserUI extends Component {
 
       const collUrl = `/${user}/${coll}/`;
       message = (
-          `Sorry, the remote browser session has expired.<br />
-          You can <a href="${collUrl}index?query=session:${rec}">view the recording</a> or <a href="${collUrl}$new">create a new recording</a>`
+        `Sorry, the remote browser recording session has expired.<br />
+         You can <a href="${collUrl}index?query=session:${rec}">view the recording</a> or <a href="${collUrl}$new">create a new recording</a>`
       );
 
       this.setState({

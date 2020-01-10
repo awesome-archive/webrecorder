@@ -6,7 +6,7 @@ import removeMd from 'remove-markdown';
 import { Button, DropdownButton, FormControl, MenuItem } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 
-import { onboardingLink, truncSentence, truncWord } from 'config';
+import { appHost, onboardingLink, truncSentence, truncWord } from 'config';
 import { doubleRAF, getCollectionLink, truncate } from 'helpers/utils';
 
 import { DeleteCollection, Upload } from 'containers';
@@ -30,6 +30,7 @@ class CollectionHeaderUI extends Component {
 
   static propTypes = {
     auth: PropTypes.object,
+    autoId: PropTypes.string,
     collection: PropTypes.object,
     collEdited: PropTypes.bool,
     collEditing: PropTypes.bool,
@@ -38,6 +39,7 @@ class CollectionHeaderUI extends Component {
     editCollection: PropTypes.func,
     history: PropTypes.object,
     shareToDat: PropTypes.func,
+    stopAutomation: PropTypes.func,
     unshareFromDat: PropTypes.func
   };
 
@@ -53,7 +55,7 @@ class CollectionHeaderUI extends Component {
 
   downloadCollection = () => {
     const { collection } = this.props;
-    window.location = `${getCollectionLink(collection)}/$download`;
+    window.location.href = `${appHost}/${getCollectionLink(collection)}/$download`;
   }
 
   copyDat = () => {
@@ -77,11 +79,6 @@ class CollectionHeaderUI extends Component {
   datUnshare = () => {
     const { collection, unshareFromDat } = this.props;
     unshareFromDat(collection.get('owner'), collection.get('id'));
-  }
-
-  howTo = () => {
-    const { history } = this.props;
-    history.push('/_documentation');
   }
 
   editModal = () => {
@@ -117,6 +114,11 @@ class CollectionHeaderUI extends Component {
     doubleRAF(() => this.setState({ onBoarding: false }));
   }
 
+  stopAutomation = () => {
+    const { autoId, collection } = this.props;
+    this.props.stopAutomation(collection.get('owner'), collection.get('id'), autoId);
+  }
+
   togglePublicView = () => {
     const { collection, history } = this.props;
     history.push(getCollectionLink(collection));
@@ -133,6 +135,8 @@ class CollectionHeaderUI extends Component {
 
     const titleCapped = truncate(collTitle, 9, truncWord);
     const allowDat = JSON.parse(process.env.ALLOW_DAT);
+
+    const newFeatures = canAdmin && ['admin', 'beta-archivist'].includes(this.props.auth.get('role'));
 
     return (
       <header className={containerClasses}>
@@ -172,7 +176,7 @@ class CollectionHeaderUI extends Component {
                     truncate(removeMd(collection.get('desc'), { useImgAltText: false }), 3, truncSentence)
                   }
                 </div> :
-                canAdmin && <button className="button-link" onClick={this.editModal}>+ Add description</button>
+                canAdmin && <button className="button-link" onClick={this.editModal} type="button">+ Add description</button>
             }
           </div>
 
@@ -188,12 +192,12 @@ class CollectionHeaderUI extends Component {
                   <MenuItem onClick={this.manageCollection}>Manage Sessions</MenuItem>
                   {
                     !isAnon &&
-                      <Upload classes="" fromCollection={collection.get('id')} wrapper={MenuItem}>Upload To Collection</Upload>
+                      <Upload classes="" fromCollection={collection.get('id')} wrapper={MenuItem}>{ __DESKTOP__ ? 'Import' : 'Upload' } To Collection</Upload>
                   }
-                  <MenuItem onClick={this.downloadCollection}>Download Collection</MenuItem>
+                  <MenuItem onClick={this.downloadCollection}>{ __DESKTOP__ ? 'Export' : 'Download' } Collection</MenuItem>
                   <DeleteCollection wrapper={MenuItem}>Delete Collection</DeleteCollection>
                   {
-                    allowDat && canAdmin && !isAnon && ['admin', 'beta-archivist'].includes(this.props.auth.get('role') || '') &&
+                    allowDat && canAdmin && !isAnon && newFeatures &&
                       <React.Fragment>
                         <MenuItem divider />
                         <MenuItem onClick={this.toggleDatModal}><p className="menu-label">More Sharing Options</p><DatIcon /> Share via Dat...</MenuItem>
@@ -202,9 +206,9 @@ class CollectionHeaderUI extends Component {
                   <MenuItem divider />
                   {
                     onboardingLink && !this.context.isMobile &&
-                      <MenuItem onClick={this.showOnboarding}>&#127881; Tour New Features</MenuItem>
+                      <MenuItem onClick={this.showOnboarding}><span role="img" aria-label="tada emoji">&#127881;</span> Tour New Features</MenuItem>
                   }
-                  <MenuItem href="https://webrecorder.github.io/webrecorder-user-guide/" target="_blank">Help</MenuItem>
+                  <MenuItem href="https://guide.webrecorder.io/" target="_blank">Help</MenuItem>
                 </DropdownButton>
               </div>
           }
@@ -253,7 +257,7 @@ class CollectionHeaderUI extends Component {
           <div className="access-row">
             <Link to={getCollectionLink(collection)}>Collection Cover</Link>
             {
-              !isAnon && canAdmin &&
+              !isAnon && canAdmin && !__DESKTOP__ &&
                 <PublicSwitch
                   callback={this.setPublic}
                   isPublic={isPublic}

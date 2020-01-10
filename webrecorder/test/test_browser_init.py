@@ -20,13 +20,21 @@ def mock_load_all_browsers(self):
 
 def mock_new_browser(key):
     def do_mock(self, url, data):
+        data['reqid'] = 'ABCDEFG'
         TestBrowserInit.browser_redis.hmset(key, data)
         return {'id': data['browser'], 'reqid': 'ABCDEFG'}
 
     return do_mock
 
+def mock_reqid_to_user_params(self, reqid):
+    return TestBrowserInit.browser_redis.hgetall('up:test')
+
+def mock_browser_sesh_id(self, reqid):
+    return
+
 
 # ============================================================================
+@patch('webrecorder.browsermanager.BrowserManager.browser_sesh_id', mock_browser_sesh_id)
 class TestBrowserInit(FullStackTests):
     rec_name = None
     browser_redis = None
@@ -67,7 +75,7 @@ class TestBrowserInit(FullStackTests):
             'mode': 'record'
         }
 
-        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('ip:test')):
+        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('up:test')):
             res = self.testapp.get('/api/v1/create_remote_browser', params=params)
 
         assert res.json == {'reqid': 'ABCDEFG',
@@ -78,8 +86,8 @@ class TestBrowserInit(FullStackTests):
                             'url': 'http://example.com/',
                            }
 
-        res = self.browser_redis.hgetall('ip:test')
-        assert res['request_ts'] == ''
+        res = self.browser_redis.hgetall('up:test')
+        assert res['timestamp'] == ''
         assert res['sources'] == ''
         assert res['inv_sources'] == ''
         assert res['patch_rec'] == ''
@@ -89,9 +97,10 @@ class TestBrowserInit(FullStackTests):
                                    'ip', 'id', 'type',
                                    'coll', 'coll_name',
                                    'rec', 'patch_rec',
-                                   'url', 'request_ts',
+                                   'url', 'timestamp',
                                    'sources', 'inv_sources',
                                    'browser', 'browser_can_write',
+                                   'reqid',
                                   }
 
     def test_create_browser_for_embed_patch(self):
@@ -105,6 +114,7 @@ class TestBrowserInit(FullStackTests):
             'mode': 'extract:ia',
 
             'browser': 'chrome:60',
+            'reqid': 'ABCDEFG',
         }
 
         res = self.testapp.post_json('/api/v1/new', params=params)
@@ -115,7 +125,7 @@ class TestBrowserInit(FullStackTests):
         params['rec'] = res.json['rec_name']
         params['patch_rec'] = res.json['patch_rec_name']
 
-        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('ip:test2')):
+        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('up:test2')):
             res = self.testapp.get('/api/v1/create_remote_browser', params=params)
 
         assert res.json == {'reqid': 'ABCDEFG',
@@ -126,8 +136,8 @@ class TestBrowserInit(FullStackTests):
                             'url': 'http://geocities.com/',
                            }
 
-        res = self.browser_redis.hgetall('ip:test2')
-        assert res['request_ts'] == '1996'
+        res = self.browser_redis.hgetall('up:test2')
+        assert res['timestamp'] == '1996'
         assert res['sources'] == 'ia'
         assert res['inv_sources'] == 'ia'
         assert res['patch_rec'] != ''
@@ -137,9 +147,10 @@ class TestBrowserInit(FullStackTests):
                                    'ip', 'id', 'type',
                                    'coll', 'coll_name',
                                    'rec', 'patch_rec',
-                                   'url', 'request_ts',
+                                   'url', 'timestamp',
                                    'sources', 'inv_sources',
                                    'browser', 'browser_can_write',
+                                   'reqid',
                                   }
 
     def test_create_browser_error_invalid_mode(self):
@@ -156,7 +167,7 @@ class TestBrowserInit(FullStackTests):
             'browser': 'chrome:60',
         }
 
-        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('ip:test3')):
+        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('up:test3')):
             res = self.testapp.get('/api/v1/create_remote_browser', params=params, status=400)
 
         assert res.json['error'] == 'invalid_mode'
@@ -173,7 +184,7 @@ class TestBrowserInit(FullStackTests):
             'browser': 'chrome:60',
         }
 
-        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('ip:test3')):
+        with patch('webrecorder.browsermanager.BrowserManager._api_new_browser', mock_new_browser('up:test3')):
             res = self.testapp.get('/api/v1/create_remote_browser', params=params, status=404)
 
         assert res.json['error'] == 'no_such_recording'
@@ -182,5 +193,22 @@ class TestBrowserInit(FullStackTests):
         assert self.redis.keys(Stats.BROWSERS_KEY.format('*')) == [Stats.BROWSERS_KEY.format('chrome:60')]
         assert self.redis.hget(Stats.BROWSERS_KEY.format('chrome:60'), today_str()) == '4'
 
+    def test_record_put_record(self):
+        with patch('webrecorder.browsermanager.BrowserManager._api_reqid_to_user_params', mock_reqid_to_user_params):
+            res = self.testapp.put('/api/v1/remote/put-record?reqid=ABCDEF&target_uri=custom:///test.txt', params=b'Test Resource\nData',
+                                   headers={'Content-Type': 'text/other'})
 
+        assert res.json['WARC-Date']
+
+        # session should not change
+        assert 'Set-Cookie' not in res.headers
+
+    def test_replay_resource(self):
+        assert self.testapp.cookies['__test_sesh'] != ''
+
+        res = self._anon_get('/{user}/temp/mp_/custom:///test.txt')
+
+        assert res.headers['Content-Type'] == 'text/other'
+
+        assert 'Test Resource\nData' == res.text
 

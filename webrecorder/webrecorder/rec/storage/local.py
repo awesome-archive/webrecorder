@@ -1,18 +1,25 @@
+import hashlib
+import logging
 import os
 import shutil
+import traceback
+from contextlib import closing
+
+from pywb.utils.loaders import BlockLoader
 
 from webrecorder.rec.storage.base import BaseStorage
 from webrecorder.rec.storage.storagepaths import add_local_store_prefix, strip_prefix
+
+logger = logging.getLogger('wr.io')
 
 
 # ============================================================================
 class DirectLocalFileStorage(BaseStorage):
     """Webrecorder storage (local files)."""
+
     def __init__(self):
         """Initialize Webrecorder storage."""
-        super(DirectLocalFileStorage, self).__init__()
-
-        self.storage_root = os.environ['STORAGE_ROOT']
+        super(DirectLocalFileStorage, self).__init__(os.environ['STORAGE_ROOT'])
 
     def delete_collection_dir(self, dir_path):
         """Delete collection directory.
@@ -25,13 +32,14 @@ class DirectLocalFileStorage(BaseStorage):
         local_dir = os.path.join(self.storage_root, dir_path)
 
         try:
-            print('Deleting Directory: ' + local_dir)
+            logger.debug('Local Store: Deleting Directory: ' + local_dir)
             parent_dir = os.path.dirname(local_dir)
             shutil.rmtree(local_dir)
             os.removedirs(parent_dir)
             return True
         except Exception as e:
-            print(e)
+            if e.errno != 2:
+                logger.error(str(e))
             return False
 
     def do_upload(self, target_url, full_filename):
@@ -49,11 +57,11 @@ class DirectLocalFileStorage(BaseStorage):
             if full_filename != target_url:
                 shutil.copyfile(full_filename, target_url)
             else:
-                print('Same File')
+                logger.debug('Local Store: Same File, No Upload')
 
             return True
         except Exception as e:
-            print(e)
+            logger.error(str(e))
             return False
 
     def is_valid_url(self, target_url):
@@ -95,13 +103,14 @@ class DirectLocalFileStorage(BaseStorage):
         :rtype: bool
         """
         try:
-            print('Deleting: ' + target_url)
+            logger.debug('Local Store: Deleting: ' + target_url)
             os.remove(target_url)
-            #if target_url.startswith(self.storage_root):
+            # if target_url.startswith(self.storage_root):
             #    os.removedirs(os.path.dirname(target_url))
             return True
         except Exception as e:
-            print(e)
+            if e.errno != 2:
+                logger.error(str(e))
             return False
 
 
@@ -111,6 +120,7 @@ class LocalFileStorage(DirectLocalFileStorage):
 
     :ivar StrictRedis redis: Redis interface
     """
+
     def __init__(self, redis):
         """Initialize Webrecorder storage w/ Redis interface.
 
@@ -128,19 +138,42 @@ class LocalFileStorage(DirectLocalFileStorage):
         :returns: whether successful or not
         :rtype: bool
         """
-        dirpath = os.path.join(self.storage_root, collection.get_dir_path())
-        return (self.redis.publish('handle_delete_dir', dirpath) > 0)
+        try:
+            dirpath = os.path.join(self.storage_root, collection.get_dir_path())
+            return self.redis.publish('handle_delete_dir', dirpath) > 0
+        except Exception:
+            traceback.print_exc()
+            return False
 
     def do_delete(self, target_url, client_url):
         """Delete file.
-        
+
         :param str target_url: target URL
         :param str client_url: client URL (unused argument)
 
         :returns: whether successful or not
         :rtype: bool
         """
-        return (self.redis.publish('handle_delete_file', target_url) > 0)
+        return self.redis.publish('handle_delete_file', target_url) > 0
 
+    def get_checksum_and_size(self, filepath_or_url):
+        """Returns the checksum of the supplied URL or filepath and the size of the resource
 
+        :param str filepath_or_url: The URL or filepath to the resource that the checksum and size is desired for
+        :return: A three tuple containing the kind of checksum, the checksum itself, and size
+        :rtype: tuple[str|None, str|None, int|None]
+        """
+        m = hashlib.md5()
+        amount = 1024 * 1024
+        total_size = 0
+        with closing(BlockLoader().load(filepath_or_url)) as f:
+            while True:
+                chunk = f.read(amount)
+                chunk_size = len(chunk)
+                if chunk_size == 0:
+                    break
+                total_size += chunk_size
+                m.update(chunk)
+
+        return 'md5', m.hexdigest(), total_size
 

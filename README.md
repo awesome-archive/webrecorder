@@ -1,5 +1,7 @@
+
 # Webrecorder Project
 ### *Web archiving for All!*
+[![Join the chat at https://gitter.im/webrecorder/webrecorder](https://badges.gitter.im/webrecorder/webrecorder.svg)](https://gitter.im/webrecorder/webrecorder)
 
 Webrecorder provides an integrated platform for creating high-fidelity, ISO-compliant web archives in a user-friendly interface, providing access to archived content, and sharing collections.
 
@@ -29,9 +31,12 @@ Webrecorder and related tools are designed to make web archiving more portable a
 
 Using our hosted version of Webrecorder at https://webrecorder.io/, users can sign up for a free account and create their own personal collections of web archives. Captures web content will be available online, either publicly or only privately, under each user account, and can be downloaded by the account owner at any time. Downloaded web archives are available as WARC files. (WARC is the ISO standard file format for web archives.) The hosted service can also be used anonymously and the captured content can be downloaded at the end of a temporary session.
 
-### 2. Offline Browsing
+### 2. Offline Capture and Browsing
 
-We also provide a OSX/Windows/Linux Electron application, [Webrecorder Player](https://github.com/webrecorder/webrecorderplayer-electron) that can browse WARC created by Webrecorder (and other web archiving tools) locally on the desktop.
+We also provide two OSX/Windows/Linux Electron applications:
+
+* [Webrecorder Player](https://github.com/webrecorder/webrecorder-player) browse WARCs created by Webrecorder (and other web archiving tools) locally on the desktop.
+* [Webrecorder Desktop](https://github.com/webrecorder/webrecorder-desktop) a desktop version of the hosted Webrecorder service providing both capture and replay features.
 
 
 ### 3. Preconfigured Deployment
@@ -75,16 +80,11 @@ Remote Browsers are optional, and can be installed as needed.
 
 Remote Browsers are just Docker images which start with `oldweb-today/`, and are part of
 [oldweb-today](https://github.com/oldweb-today/) organization on GitHub.
-Installing the browsers can be as simple as running `docker pull` on each image.
+Installing the browsers can be as simple as running `docker pull` on each browser image each as well as
+additional Docker images for the Remote Desktop system.
 
-To install all of the officially supported browsers, run [install-browsers.sh](install-browsers.sh)
+To install the Remote Desktop System and all of the officially supported Remote Browsers, run [install-browsers.sh](install-browsers.sh)
 
-For example, to install a version of Chrome 60 and Firefox 49, run:
-
-```
-docker pull oldwebtoday/chrome:60
-docker pull oldwebtoday/firefox:49
-```
 
 ### Configuration
 
@@ -101,6 +101,12 @@ To run Webrecorder on different domains, the `APP_HOST` and `CONTENT_HOST` envir
 For best results, the two domains should be two subdomains, both with https enabled.
 
 The `SCHEME` env var should also be set to `SCHEME=https` when deploying via https.
+
+#### Anonymous Mode
+
+By default webrecorder disallows anonymous recording. To enable this feature, set ANON_DISABLED=false to the wr.env file and restart.
+
+*Note: Previously the default setting was anonymous recording enabled (`ANON_DISABLED=false`)*
 
 #### Storage
 
@@ -136,13 +142,13 @@ The script `admin.py` provides easy low level management of users. Adding, modif
 To interactively create a user:
 
 ```sh
-docker exec -it webrecorder_app_1 python -m webrecorder.admin -c
+docker exec -it app python -m webrecorder.admin -c
 ```
 
 or programmatically add users by supplying the appropriate positional values:
 
 ```sh
-docker exec -it webrecorder_app_1  python -m webrecorder.admin \
+docker exec -it app  python -m webrecorder.admin \
                 -c <email> <username> <passwd> <role> '<full name>'
 ```
 
@@ -154,7 +160,7 @@ Other arguments:
 * `-l` list invited users
 * `-b` send backlogged invites
 
-See `docker exec -it webrecorder_app_1 python -m webrecorder.admin --help` for full details.
+See `docker exec -it app python -m webrecorder.admin --help` for full details.
 
 ### Restarting Webrecorder
 
@@ -228,6 +234,8 @@ For any general questions/concerns regarding the project or https://webrecorder.
 * Tweet to us at https://twitter.com/webrecorder_io
 
 * Contact us at support@webrecorder.io
+
+* Ask questions via our Gitter channel at https://gitter.im/webrecorder/webrecorder
 
 ### License
 

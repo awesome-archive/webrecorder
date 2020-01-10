@@ -1,12 +1,12 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import Helmet from 'react-helmet';
+import classNames from 'classnames';
 import { Panel } from 'react-bootstrap';
 
 import config from 'config';
 
-import { addTrailingSlash, apiFetch, fixMalformedUrls,
-         remoteBrowserMod } from 'helpers/utils';
+import { addTrailingSlash, apiFetch, fixMalformedUrls, remoteBrowserMod } from 'helpers/utils';
 
 import { ExtractWidget, RemoteBrowserSelect } from 'containers';
 
@@ -16,21 +16,24 @@ import './style.scss';
 class NewRecordingUI extends Component {
   static contextTypes = {
     canAdmin: PropTypes.bool,
-    currMode: PropTypes.string,
-    router: PropTypes.object
-  }
+    currMode: PropTypes.string
+  };
 
   static propTypes = {
+    auth: PropTypes.object,
     collection: PropTypes.object,
     extractable: PropTypes.object,
-    remoteBrowserSelected: PropTypes.string
-  }
+    history: PropTypes.object,
+    remoteBrowserSelected: PropTypes.string,
+    spaceUtilization: PropTypes.object
+  };
 
   constructor(props) {
     super(props);
 
     this.state = {
-      url: ''
+      url: '',
+      validation: null
     };
   }
 
@@ -64,8 +67,21 @@ class NewRecordingUI extends Component {
     // generate recording url
     apiFetch('/new', data, { method: 'POST' })
       .then(res => res.json())
-      .then(({ url }) => this.context.router.history.push(url.replace(config.appHost, '')))
+      .then(({ url }) => this.props.history.push(url.replace(config.appHost, '')))
       .catch(err => console.log('error', err));
+  }
+
+  startPreview = (evt) => {
+    evt.preventDefault();
+    const { auth, history, collection } = this.props;
+    const { url } = this.state;
+
+    if (!url) {
+      return this.setState({ validation: 'error' });
+    }
+
+    const cleanUrl = addTrailingSlash(fixMalformedUrls(url));
+    history.push(`/${auth.getIn(['user', 'username'])}/${collection.get('id')}/live/${cleanUrl}`);
   }
 
   handleChange = (evt) => {
@@ -86,11 +102,14 @@ class NewRecordingUI extends Component {
         </Helmet>
         <div role="presentation" className="container-fluid wr-controls navbar-default new-recording-ui">
           <div className="main-bar">
-            <form className="form-group-recorder-url start-recording" onSubmit={this.handeSubmit}>
+            <form className={classNames('form-group-recorder-url start-recording', { 'has-error': this.state.validation === 'error' })} onSubmit={this.handeSubmit}>
               <div className="input-group containerized">
-                <div className="input-group-btn rb-dropdown">
-                  <RemoteBrowserSelect />
-                </div>
+                {
+                  !__DESKTOP__ &&
+                    <div className="input-group-btn rb-dropdown">
+                      <RemoteBrowserSelect />
+                    </div>
+                }
 
                 <input
                   autoFocus
@@ -100,7 +119,7 @@ class NewRecordingUI extends Component {
                   disabled={isOutOfSpace}
                   name="url"
                   onChange={this.handleChange}
-                  style={{ height: '3.3rem' }}
+                  style={{ height: '3.2rem' }}
                   title={isOutOfSpace ? 'Out of space' : 'Enter URL to capture'}
                   type="text"
                   value={url} />
@@ -109,17 +128,20 @@ class NewRecordingUI extends Component {
                   includeButton
                   toCollection={collection.get('title')}
                   url={url} />
-
-                {
-                  !extractable &&
-                    <div className="input-group-btn record-action">
-                      <button type="submit" className="btn btn-default" disabled={isOutOfSpace}>
-                        Start
-                      </button>
-                    </div>
-                }
-
               </div>
+
+              {
+                !extractable &&
+                  <React.Fragment>
+                    {
+                      __DESKTOP__ &&
+                        <button onClick={this.startPreview} type="button" className="btn btn-default rounded">Preview</button>
+                    }
+                    <button type="submit" className="btn btn-default rounded" disabled={isOutOfSpace}>
+                      Capture
+                    </button>
+                  </React.Fragment>
+              }
             </form>
           </div>
         </div>

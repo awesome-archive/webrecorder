@@ -2,6 +2,68 @@
 import { supportEmail } from 'config';
 
 export default {
+  autopilot: {
+    autoScrollBehavior: {
+      timesScrolled: 'Times Autoscrolled'
+    },
+    deathImitatesLanguageBehavior: {
+      items: 'Works Captured'
+    },
+    slideShareBehavior: {
+      slides: 'Slides Captured',
+      decks: 'Presentations Captured'
+    },
+    youtubeVideoBehavior: {
+      loadedVideoInfo: 'Video Description Captured',
+      playedVideo: 'Video Captured',
+      viewedComments: 'Comments Captured'
+    },
+    twitterTimelineBehavior: {
+      videos: 'Videos Captured',
+      threadsOrReplies: 'Replies Captured',
+      viewedFully: 'Tweets Captured'
+    },
+    twitterHashTagsBehavior: {
+      videos: 'Videos Captured',
+      threadsOrReplies: 'Replies Captured',
+      viewedFully: 'Tweets Captured'
+    },
+    twitterTimelineBehaviorNew: {
+      videos: 'Videos Captured',
+      threadsOrReplies: 'Replies Captured',
+      viewed: 'Tweets Captured'
+    },
+    soundCloudArtistBehavior: {
+      tracksPlayed: 'Tracks Captured',
+      trackListsPlayed: 'Playlists Captured'
+    },
+    soundCloudEmbedBehavior: {
+      tracksPlayed: 'Tracks Captured',
+      trackListsPlayed: 'Playlists Captured'
+    },
+    instagramUserBehavior: {
+      viewedFully: 'Posts Captured',
+      viewedStories: 'Stories Captured',
+      viewedSelectedStories: 'Highlights Captured'
+    },
+    instagramOwnFeedBehavior: {
+      viewed: 'Posts Captured',
+      viewedStories: 'Stories Captured',
+      viewedSelectedStories: 'Highlights Captured'
+    },
+    instagramPostBehavior: {
+      viewed: 'Posts Captured',
+      viewedStories: 'Stories Captured'
+    },
+    facebookUserFeed: {
+      videos: 'Videos Captured',
+      posts: 'Posts Captured'
+    },
+    facebookNewsFeed: {
+      videos: 'Videos Captured',
+      posts: 'Posts Captured'
+    }
+  },
   collection: {
     duplicate_name: 'A collection with the supplied name already exists.',
     no_such_collection: 'Collection not found.',
@@ -42,9 +104,13 @@ export default {
     out_of_space: 'Sorry, not enough space to import this Temporary Collection into your account.',
     invalid_coll_name: 'The collection name entered is not valid'
   },
+  passwordReset: {
+    already_logged_in: 'An account is already logged in.'
+  },
   registration: {
-    already_registered: 'This account has already been registerd',
+    already_registered: 'This account has already been registered',
     duplicate_name: 'A collection with the supplied name already exists.',
+    email_not_available: 'This email address is associated with another account.',
     invalid_code: `The registration code is not valid. Please try registering again, or contact ${supportEmail} if this error persists.`,
   },
   upload: {

@@ -12,7 +12,8 @@ export function addTrailingSlash(url) {
 
 export function apiFetch(path, data, opts = {}) {
   const options = Object.assign({
-    credentials: 'same-origin',
+    //credentials: 'same-origin',
+    credentials: 'include',
     body: JSON.stringify(data),
     headers: new Headers({
       'Content-Type': 'application/json',
@@ -20,7 +21,39 @@ export function apiFetch(path, data, opts = {}) {
     })
   }, opts);
 
-  return fetch(`${config.apiPath}${path}`, options);
+  return fetch(`${config.appHost}${config.apiPath}${path}`, options);
+}
+
+
+export function apiFormatUrl(path) {
+  if (__PLAYER__) {
+    return path;
+  }
+
+  const adjustedPath = path[0] !== '/' ? `/${path}` : path;
+  if (__SERVER__ || __DESKTOP__) {
+    // on the server use internal network
+    return `http://${config.internalApiHost}:${config.internalApiPort}${adjustedPath}`;
+  }
+
+  // client side use current host
+  return `${adjustedPath}`;
+}
+
+
+export function appendFlashVersion(version) {
+  for (let i = 0; i < navigator.plugins.length; i++) {
+    const plugin = navigator.plugins[i];
+    if (plugin.name === "Shockwave Flash") {
+      return `${version}<BR>${plugin.description.toLowerCase()}`;
+    }
+  }
+  return version;
+}
+
+
+export function applyLocalTimeOffset(dt) {
+  return new Date(dt.getTime() - (new Date().getTimezoneOffset() * 60000));
 }
 
 
@@ -48,8 +81,9 @@ export function buildDate(dt, gmt, humanize) {
   if (dt) {
     let DTString = String(dt);
 
-    if (DTString.length < 14)
+    if (DTString.length < 14) {
       DTString += '10000101000000'.substr(DTString.length);
+    }
 
     const datestr = (DTString.substring(0, 4) + '-' +
                      DTString.substring(4, 6) + '-' +
@@ -76,6 +110,17 @@ export function capitalize(str) {
   }
 
   return str.length ? str[0].toUpperCase() + str.slice(1) : '';
+}
+
+
+export function chunk(arr, size) {
+  const chunkedArr = [];
+  let index = 0;
+  while (index < arr.length) {
+    chunkedArr.push(arr.slice(index, size + index));
+    index += size;
+  }
+  return chunkedArr;
 }
 
 
@@ -134,13 +179,13 @@ export function fixMalformedUrls(url) {
 }
 
 
-export function getCollectionLink(coll, index = false) {
-  return `/${coll.get('owner')}/${coll.get('slug')}${index ? '/index' : ''}`;
+export function getCollectionLink(coll, manage = false) {
+  return `/${coll.get('owner')}/${coll.get('slug')}${manage ? '/manage' : ''}`;
 }
 
 
-export function getListLink(coll, list) {
-  return `${getCollectionLink(coll)}/list/${list.get('slug')}`;
+export function getListLink(coll, list, manage = false) {
+  return `${getCollectionLink(coll)}/list/${list.get('slug')}${manage ? '/manage' : ''}`;
 }
 
 
@@ -198,7 +243,7 @@ export function isEqual(a, b) {
   }
 
   // mismatched types
-  if (Object.prototype.toString.call(a) !== Object.prototype.toString.call(a)) {
+  if (Object.prototype.toString.call(a) !== Object.prototype.toString.call(b)) {
     return false;
   }
 

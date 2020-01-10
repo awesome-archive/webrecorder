@@ -7,8 +7,6 @@ html {
 html, body {
   margin: 0;
   padding: 0;
-  font-family: $font-family-sans-serif;
-  background-color: $white;
 }
 
 body {
@@ -40,7 +38,7 @@ a {
 }
 
 .alert {
-  margin-top: 1.5rem;
+  margin-top: 2.5rem;
 }
 
 .caret {
@@ -60,6 +58,7 @@ a {
 
 .btn-primary {
   background-color: $blue;
+  background: $blue;
   border-color: $dark-blue;
 
   &:hover {
@@ -68,6 +67,8 @@ a {
 }
 
 .sidebar-toggle {
+  border-radius: 2.7rem;
+
   svg {
     vertical-align: sub;
   }
@@ -91,6 +92,14 @@ a {
     border-color: #E0E3E3;
     box-shadow: 0 0 .5rem #E0E3E3;
   }
+}
+
+.react-tabs__tab:first-of-type {
+    margin-left: 1rem;
+}
+
+.form-group-recorder-url {
+  display: flex;
 }
 
 /*
@@ -196,12 +205,6 @@ a {
   }
 }
 
-.no-shadow {
-  box-shadow: none;
-  border: 0 solid $gray400;
-  border-width: 0 0 0.1rem 0;
-}
-
 .button-link {
     border: none;
     background: none;
@@ -222,6 +225,17 @@ a {
   font-size: 1.15rem;
   background: transparent;
   border: solid .1rem #CCC;
+
+  &.btn-primary {
+    background-color: $blue;
+    background: $blue;
+    border-color: $dark-blue;
+    color: $white;
+
+    &:hover {
+      background-color: $dark-blue;
+    }
+  }
 }
 
 .borderless {

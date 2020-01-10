@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
+import { withRouter } from 'react-router';
 
 import { remoteBrowserMod } from 'helpers/utils';
 
@@ -13,13 +14,13 @@ import './style.scss';
 class ReplayURLBar extends Component {
   static contextTypes = {
     canAdmin: PropTypes.bool,
-    currMode: PropTypes.string,
-    router: PropTypes.object
+    currMode: PropTypes.string
   }
 
   static propTypes = {
     activeBrowser: PropTypes.string,
     bookmarks: PropTypes.object,
+    history: PropTypes.object,
     params: PropTypes.object,
     recordingIndex: PropTypes.number,
     timestamp: PropTypes.string,
@@ -44,12 +45,12 @@ class ReplayURLBar extends Component {
   }
 
   handleSubmit = (evt) => {
-    const { activeBrowser, params: { user, coll } } = this.props;
+    const { activeBrowser, history, params: { user, coll } } = this.props;
     const { url } = this.state;
 
     if (evt.key === 'Enter') {
       evt.preventDefault();
-      this.context.router.history.push(`/${user}/${coll}/${remoteBrowserMod(activeBrowser, null, '/')}${url}`);
+      history.push(`/${user}/${coll}/${remoteBrowserMod(activeBrowser, null, '/')}${url}`);
     }
   }
 
@@ -62,17 +63,17 @@ class ReplayURLBar extends Component {
       <div className="main-bar">
         <form className="form-group-recorder-url">
           <div className="input-group containerized">
-            <div className="input-group-btn rb-dropdown">
-              {
-                canAdmin &&
+            {
+              canAdmin && !__DESKTOP__ &&
+                <div className="input-group-btn rb-dropdown">
                   <RemoteBrowserSelect
                     active
                     params={params} />
-              }
-            </div>
+                </div>
+            }
 
             <div className="wr-app-url">
-              <input type="text" onChange={this.handleInput} onKeyPress={this.handleSubmit} style={{ height: '3.3rem' }} className="form-control dropdown-toggle" name="url" aria-haspopup="true" value={url} autoComplete="off" />
+              <input type="text" onChange={this.handleInput} onKeyPress={this.handleSubmit} style={{ height: '3.2rem' }} className="form-control dropdown-toggle" name="url" aria-haspopup="true" value={url} autoComplete="off" />
               <div className="wr-replay-info">
                 <InfoWidget />
                 <span className="replay-date main-replay-date hidden-xs">
@@ -88,4 +89,4 @@ class ReplayURLBar extends Component {
   }
 }
 
-export default ReplayURLBar;
+export default withRouter(ReplayURLBar);

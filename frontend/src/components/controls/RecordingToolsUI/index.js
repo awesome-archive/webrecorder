@@ -1,26 +1,30 @@
 import React, { PureComponent } from 'react';
 import PropTypes from 'prop-types';
-import { Button, DropdownButton, MenuItem } from 'react-bootstrap';
+import classNames from 'classnames';
+import { Button } from 'react-bootstrap';
 
 import { appHost, product } from 'config';
 import { apiFetch } from 'helpers/utils';
 
+import { ShareWidget } from 'containers';
+
 import Modal from 'components/Modal';
-import { BugReport, ShareWidget } from 'containers';
+import { WandIcon } from 'components/icons';
 
 import './style.scss';
 
 
 class RecordingToolsUI extends PureComponent {
-
   static propTypes = {
     activeBrowser: PropTypes.string,
-    autoscroll: PropTypes.bool,
+    auth: PropTypes.object,
+    autopilotInfo: PropTypes.object,
     history: PropTypes.object,
+    autopilot: PropTypes.bool,
     match: PropTypes.object,
     timestamp: PropTypes.string,
-    toggleAutoscroll: PropTypes.func,
     toggleClipboard: PropTypes.func,
+    toggleAutopilotSidebar: PropTypes.func,
     url: PropTypes.string
   };
 
@@ -38,7 +42,7 @@ class RecordingToolsUI extends PureComponent {
   onPatch = () => {
     if (this.context.currMode === 'record') return;
 
-    const { activeBrowser, match: { params: { coll } }, timestamp, url } = this.props;
+    const { activeBrowser, history, match: { params: { coll } }, timestamp, url } = this.props;
 
     // data to create new recording
     const data = {
@@ -55,14 +59,14 @@ class RecordingToolsUI extends PureComponent {
     // generate recording url
     apiFetch('/new', data, { method: 'POST' })
       .then(res => res.json())
-      .then(({ url }) => { window.location.href = url.replace(appHost, ''); })
+      .then(({ url }) => { history.push(url.replace(appHost, '')); })
       .catch(err => console.log('error', err));
   }
 
   onRecord = () => {
     if (this.context.currMode === 'record') return;
 
-    const { activeBrowser, match: { params: { coll } }, url } = this.props;
+    const { activeBrowser, history, match: { params: { coll } }, url } = this.props;
     const data = {
       url,
       coll,
@@ -76,35 +80,40 @@ class RecordingToolsUI extends PureComponent {
     // generate recording url
     apiFetch('/new', data, { method: 'POST' })
       .then(res => res.json())
-      .then(({ url }) => { window.location.href = url.replace(appHost, ''); })
+      .then(({ url }) => { history.push(url.replace(appHost, '')); })
       .catch(err => console.log('error', err));
   }
 
-  catalogView = () => {
-    const { match: { params: { user, coll } } } = this.props;
-    this.props.history.push(`/${user}/${coll}/index`);
+  startAuto = () => {
+    apiFetch(`/browser/behavior/start/${this.props.reqId}`, {}, { method: 'POST' });
   }
 
-  toggleAutoscroll = () => {
-    this.props.toggleAutoscroll(!this.props.autoscroll);
-  }
-
-  userGuide = () => {
-    this.props.history.push('/_documentation');
+  stopAuto = () => {
+    apiFetch(`/browser/behavior/stop/${this.props.reqId}`, {}, { method: 'POST' });
   }
 
   openClipboard = () => this.props.toggleClipboard(true)
+
   closeClipboard = () => this.props.toggleClipboard(false)
+
   _open = () => this.setState({ clipboardOpen: true })
+
   _close = () => this.setState({ clipboardOpen: false })
+
+  toggleAutopilotSidebar = () => {
+    this.props.toggleAutopilotSidebar(!this.props.autopilot);
+  }
 
   render() {
     const { canAdmin, currMode } = this.context;
-    const { activeBrowser, autoscroll } = this.props;
+    const { activeBrowser, autopilotInfo } = this.props;
 
     const isNew = currMode === 'new';
-    const isWrite = ['new', 'patch', 'record', 'extract'].includes(currMode);
+    const isWrite = ['new', 'patch', 'record', 'extract', 'live'].includes(currMode);
     const modalFooter = <Button onClick={this._close}>Close</Button>;
+    const autopilotClasses = classNames('rounded autopilot-btn', {
+      'special-behavior': autopilotInfo && autopilotInfo.get('defaultBehavior') !== true
+    });
 
     return (
       <div className="recording-actions text-center hidden-xs">
@@ -118,36 +127,25 @@ class RecordingToolsUI extends PureComponent {
           <p>You can also paste text here to send to remote browser.</p>
           <textarea id="clipboard" autoFocus style={{ width: '100%', minHeight: 200 }} />
         </Modal>
+
         {
-          canAdmin && !isNew &&
-            <DropdownButton pullRight noCaret id="tool-dropdown" title={<span className="glyphicon glyphicon-option-vertical" aria-hidden="true" />}>
-              <MenuItem onClick={this.catalogView}>Collection Index</MenuItem>
-              {
-                currMode.includes('replay') &&
-                  <React.Fragment>
-                    <MenuItem divider />
-                    <MenuItem onClick={this.onPatch}>Patch this URL</MenuItem>
-                    <MenuItem onClick={this.onRecord}>Record this URL again</MenuItem>
-                  </React.Fragment>
-              }
-              <MenuItem divider />
-              <MenuItem onClick={this.toggleAutoscroll}>{autoscroll ? 'Turn off' : 'Turn on'} autoscroll</MenuItem>
-              {
-                activeBrowser &&
-                  <MenuItem onClick={this._open}>
-                    <span className="glyphicon glyphicon-paste" /> Clipboard
-                  </MenuItem>
-              }
-              <MenuItem divider />
-              <MenuItem onClick={this.userGuide}>Help</MenuItem>
-            </DropdownButton>
+          canAdmin && !isNew && activeBrowser &&
+            <button
+              type="button"
+              className="rounded clipboard-btn"
+              aria-label="Remote browser clipboard"
+              onClick={this._open}>
+              <span className="glyphicon glyphicon-paste" />
+            </button>
         }
+
         {
-          !isNew && product !== 'player' &&
-            <BugReport />
+          isWrite && currMode !== 'live' &&
+            <button className={autopilotClasses} onClick={this.toggleAutopilotSidebar} type="button"><WandIcon />Autopilot</button>
         }
+
         {
-          !isWrite && product !== 'player' &&
+          !isWrite && !__DESKTOP__ &&
             <ShareWidget />
         }
       </div>

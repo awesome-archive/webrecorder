@@ -3,10 +3,12 @@ import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import { Button } from 'react-bootstrap';
 
-import { product } from 'config';
+import { product, apiPath } from 'config';
+import { apiFormatUrl } from 'helpers/utils';
+
 import { upload as uploadErrors } from 'helpers/userMessaging';
 
-import { incrementCollCount } from 'redux/modules/auth';
+import { incrementCollCount } from 'store/modules/auth';
 
 import { CollectionDropdown } from 'containers';
 import Modal from 'components/Modal';
@@ -15,15 +17,12 @@ import './style.scss';
 
 
 class UploadUI extends PureComponent {
-  static contextTypes = {
-    router: PropTypes.object
-  };
-
   static propTypes = {
     activeCollection: PropTypes.string,
     classes: PropTypes.string,
     dispatch: PropTypes.func,
     fromCollection: PropTypes.string,
+    history: PropTypes.object,
     wrapper: PropTypes.func
   };
 
@@ -56,7 +55,7 @@ class UploadUI extends PureComponent {
 
   filePicker = (evt) => {
     if (evt.target.files.length > 0) {
-      this.fileObj = evt.target.files[0];
+      this.fileObj = evt.target.files[0]; // eslint-disable-line
       this.setState({ file: this.fileObj.name });
     }
   }
@@ -77,14 +76,14 @@ class UploadUI extends PureComponent {
 
     this.xhr = new XMLHttpRequest();
     const target = targetColl === 'chosen' ? activeCollection : '';
-    const url = `/_upload?force-coll=${target}&filename=${file}`;
+    const url = apiFormatUrl(`${apiPath}/upload?force-coll=${target}&filename=${file}`);
 
     this.xhr.upload.addEventListener('progress', this.uploadProgress);
     this.xhr.addEventListener('load', this.uploadSuccess);
     this.xhr.addEventListener('loadend', this.uploadComplete);
 
     this.xhr.open('PUT', url, true);
-
+    this.xhr.setRequestHeader('x-requested-with', 'XMLHttpRequest');
 
     this.setState({
       isUploading: true,
@@ -139,13 +138,13 @@ class UploadUI extends PureComponent {
     if (this.state.targetColl !== 'chosen') {
       this.props.dispatch(incrementCollCount(1));
     }
-    this.context.router.history.push(`/${user}/${coll}/index`);
+    this.props.history.push(`/${user}/${coll}/manage`);
   }
 
   indexing = (data) => {
     this.setState({ canCancel: false, status: 'Indexing...' });
 
-    const url = `/_upload/${data.upload_id}?user=${data.user}`;
+    const url = apiFormatUrl(`${apiPath}/upload/${data.upload_id}?user=${data.user}`);
 
     this.interval = setInterval(() => {
       fetch(url, { headers: new Headers({ 'x-requested-with': 'XMLHttpRequest' }) })
@@ -172,6 +171,7 @@ class UploadUI extends PureComponent {
   }
 
   open = () => this.setState({ open: true })
+
   close = () => {
     if (this.state.isUploading && this.xhr && this.state.canCancel) {
       this.xhr.upload.removeEventListener('progress', this.uploadProgress);
@@ -188,7 +188,7 @@ class UploadUI extends PureComponent {
     const { file, isUploading, progress, status, targetColl } = this.state;
 
     const modalHeader = (
-      <h4>Upload Web Archive to { product }</h4>
+      <h4>{ __DESKTOP__ ? 'Import' : 'Upload' } Web Archive to { product }</h4>
     );
 
     const Wrapper = this.props.wrapper || Button;
@@ -196,7 +196,7 @@ class UploadUI extends PureComponent {
     const modalFooter = (
       <React.Fragment>
         <Button onClick={this.close} disabled={!this.state.canCancel}>Cancel</Button>
-        <Button onClick={this.submitUpload} disabled={isUploading} bsStyle="success">Upload</Button>
+        <Button onClick={this.submitUpload} disabled={isUploading} bsStyle="success">{ __DESKTOP__ ? 'Import' : 'Upload' }</Button>
       </React.Fragment>
     );
 
@@ -215,7 +215,7 @@ class UploadUI extends PureComponent {
           <label htmlFor="upload-file">WARC/ARC file to upload: </label>
 
           <div className="input-group">
-            <input type="text" id="upload-file" value={file} name="upload-file-text" className="form-control" placeholder="Click Pick File to select a web archive file" required readOnly style={{ backgroundColor: 'white' }} />
+            <input type="text" id="upload-file" value={file} name="upload-file-text" className="form-control" placeholder="Click Pick File to select a web archive file" required readOnly onClick={this.triggerFile} style={{ backgroundColor: 'white' }} />
             <span className="input-group-btn">
               <button aria-label="pick file..." type="button" className="btn btn-default" onClick={this.triggerFile}>
                 <span className="glyphicon glyphicon-file glyphicon-button" />Pick File...

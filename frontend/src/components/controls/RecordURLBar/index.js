@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import classNames from 'classnames';
 import PropTypes from 'prop-types';
+import { withRouter } from 'react-router';
 
 import { ExtractWidget, PatchWidget, RemoteBrowserSelect } from 'containers';
 
@@ -12,13 +13,14 @@ import './style.scss';
 class RecordURLBar extends Component {
   static contextTypes = {
     canAdmin: PropTypes.bool,
-    currMode: PropTypes.string,
-    router: PropTypes.object
+    currMode: PropTypes.string
   };
 
   static propTypes = {
     activeBrowser: PropTypes.string,
     activeCollection: PropTypes.object,
+    autopilotRunning: PropTypes.bool,
+    history: PropTypes.object,
     params: PropTypes.object,
     timestamp: PropTypes.string,
     url: PropTypes.string
@@ -44,21 +46,24 @@ class RecordURLBar extends Component {
 
   handleSubmit = (evt) => {
     const { currMode } = this.context;
-    const { activeBrowser, params: { archiveId, coll, collId, extractMode, rec, user }, timestamp } = this.props;
+    const { activeBrowser, history, params: { archiveId, coll, collId, extractMode, rec, user }, timestamp } = this.props;
     const { url } = this.state;
 
     if (evt.key === 'Enter') {
       evt.preventDefault();
 
       switch(currMode) {
+        case 'live':
+          history.push(`/${user}/${coll}/live/${url}`);
+          break;
         case 'record':
-          this.context.router.history.push(`/${user}/${coll}/${rec}/record/${remoteBrowserMod(activeBrowser, null, '/')}${url}`);
+          history.push(`/${user}/${coll}/${rec}/record/${remoteBrowserMod(activeBrowser, null, '/')}${url}`);
           break;
         case 'patch':
-          this.context.router.history.push(`/${user}/${coll}/${rec}/patch/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`);
+          history.push(`/${user}/${coll}/${rec}/patch/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`);
           break;
         case 'extract':
-          this.context.router.history.push(`/${user}/${coll}/${rec}/${extractMode}:${archiveId}${collId ? `:${collId}` : ''}/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`);
+          history.push(`/${user}/${coll}/${rec}/${extractMode}:${archiveId}${collId ? `:${collId}` : ''}/${remoteBrowserMod(activeBrowser, timestamp, '/')}${url}`);
           break;
         default:
           break;
@@ -68,7 +73,7 @@ class RecordURLBar extends Component {
 
   render() {
     const { currMode, canAdmin } = this.context;
-    const { activeCollection, params } = this.props;
+    const { activeCollection, autopilotRunning, params } = this.props;
     const { url } = this.state;
 
     const isNew = currMode === 'new';
@@ -79,17 +84,20 @@ class RecordURLBar extends Component {
       <div className="main-bar">
         <form className={classNames('form-group-recorder-url', { 'start-recording': isNew, 'content-form': !isNew, 'remote-archive': isPatch || isExtract })}>
           <div className="input-group containerized">
-            <div className="input-group-btn rb-dropdown">
-              {
-                canAdmin &&
-                  <RemoteBrowserSelect
-                    active
-                    params={params} />
-              }
-            </div>
+            {
+              !__DESKTOP__ && canAdmin &&
+                <div className="input-group-btn rb-dropdown">
+                  {
+                    <RemoteBrowserSelect
+                      active
+                      autopilotRunning={autopilotRunning}
+                      params={params} />
+                  }
+                </div>
+            }
             {
               /* {% if not browser %}autofocus{% endif %} */
-              <input type="text" onChange={this.handleChange} onKeyPress={this.handleSubmit} className="url-input-recorder form-control" name="url" value={url} style={{ height: '3.3rem' }} autoFocus required />
+              <input type="text" disabled={autopilotRunning} onChange={this.handleChange} onKeyPress={this.handleSubmit} className="url-input-recorder form-control" name="url" value={url} style={{ height: '3.2rem' }} autoFocus required />
             }
             {
               isExtract &&
@@ -108,4 +116,4 @@ class RecordURLBar extends Component {
   }
 }
 
-export default RecordURLBar;
+export default withRouter(RecordURLBar);

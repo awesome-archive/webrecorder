@@ -29,7 +29,8 @@ class CollectionDropdownUI extends Component {
     loadUserCollections: PropTypes.func,
     mostRecent: PropTypes.string,
     newCollection: PropTypes.string,
-    setCollection: PropTypes.func
+    setCollection: PropTypes.func,
+    setCollectionCallback: PropTypes.func
   };
 
   static defaultProps = {
@@ -57,7 +58,7 @@ class CollectionDropdownUI extends Component {
 
   componentWillMount() {
     const { loadUserCollections, auth } = this.props;
-    if (!auth.getIn(['user', 'anon']) && Date.now() - auth.get('accessed') > 2 * 60 * 1000) {
+    if (auth.getIn(['user', 'username']) && !auth.getIn(['user', 'anon']) && Date.now() - auth.get('accessed') > 10000) {
       loadUserCollections(auth.getIn(['user', 'username']));
     }
   }
@@ -66,7 +67,7 @@ class CollectionDropdownUI extends Component {
     const { activeCollection, collections, fromCollection, mostRecent, newCollection, setCollection } = this.props;
     const { filter } = this.state;
 
-    if (!fromCollection && !this.props.loading && prevProps.loading && activeCollection !== mostRecent) {
+    if (!fromCollection && !this.props.loading && prevProps.loading && activeCollection.id !== mostRecent) {
       setCollection(mostRecent);
     } else if (fromCollection && fromCollection !== prevProps.fromCollection) {
       setCollection(fromCollection);
@@ -89,6 +90,9 @@ class CollectionDropdownUI extends Component {
   collectionChoice = (id) => {
     // filter out new modal option
     if (id) {
+      if (this.props.setCollectionCallback) {
+        return this.props.setCollectionCallback(id);
+      }
       this.props.setCollection(id);
     }
   }
@@ -167,7 +171,6 @@ class CollectionDropdownUI extends Component {
                   {
                     <MenuItem key="filter">
                       <input
-                        autoFocus
                         autoComplete="off"
                         className="form-control"
                         name="filter"

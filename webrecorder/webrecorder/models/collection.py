@@ -1,25 +1,23 @@
-import gevent
 import logging
-import json
-import hashlib
 import os
-
+import traceback
 from datetime import date
 
+import gevent
 from pywb.utils.loaders import load
-from warcio.timeutils import timestamp20_now, timestamp_now
-
 from pywb.warcserver.index.cdxobject import CDXObject
 
-from webrecorder.utils import sanitize_title, get_new_id
-from webrecorder.models.base import RedisUnorderedList, RedisOrderedList, RedisUniqueComponent, RedisNamedMap
-from webrecorder.models.recording import Recording
-from webrecorder.models.pages import PagesMixin
+from webrecorder.models.auto import Auto
+from webrecorder.models.base import RedisNamedMap, RedisOrderedList, RedisUniqueComponent, RedisUnorderedList
 from webrecorder.models.datshare import DatShare
 from webrecorder.models.list_bookmarks import BookmarkList
+from webrecorder.models.pages import PagesMixin
+from webrecorder.models.recording import Recording
 from webrecorder.rec.storage import get_storage as get_global_storage
+from webrecorder.rec.storage.storagepaths import strip_prefix
+from webrecorder.utils import get_new_id, sanitize_title
 
-from webrecorder.rec.storage.storagepaths import strip_prefix, add_local_store_prefix
+logger = logging.getLogger('wr.io')
 
 
 # ============================================================================
@@ -52,9 +50,13 @@ class Collection(PagesMixin, RedisUniqueComponent):
     LIST_NAMES_KEY = 'c:{coll}:ln'
     LIST_REDIR_KEY = 'c:{coll}:lr'
 
+    AUTO_KEY = 'c:{coll}:autos'
+
     COLL_CDXJ_KEY = 'c:{coll}:cdxj'
 
     CLOSE_WAIT_KEY = 'c:{coll}:wait:{id}'
+
+    EXTERNAL_KEY = 'c:{coll}:ext'
 
     COMMIT_WAIT_KEY = 'w:{filename}'
 
@@ -75,6 +77,8 @@ class Collection(PagesMixin, RedisUniqueComponent):
         self.lists = RedisOrderedList(self.LISTS_KEY, self)
 
         self.list_names = RedisNamedMap(self.LIST_NAMES_KEY, self, self.LIST_REDIR_KEY)
+        self._storage = None
+        self._warc_key = None  # type: str
 
     @classmethod
     def init_props(cls, config):
@@ -122,6 +126,46 @@ class Collection(PagesMixin, RedisUniqueComponent):
             return new_recording.name
 
         return None
+
+    def create_auto(self, props=None):
+        self.access.assert_can_admin_coll(self)
+
+        auto = Auto(redis=self.redis,
+                    access=self.access)
+
+        aid = auto.init_new(self, props)
+
+        self.redis.sadd(self.AUTO_KEY.format(coll=self.my_id), aid)
+
+        return aid
+
+    def get_auto(self, aid):
+        if not self.access.can_admin_coll(self):
+            return None
+
+        auto = Auto(my_id=aid,
+                    redis=self.redis,
+                    access=self.access)
+
+        if auto['owner'] != self.my_id:
+            return None
+
+        auto.owner = self
+
+        return auto
+
+    def get_autos(self):
+        return [self.get_auto(aid) for aid in self.redis.smembers(self.AUTO_KEY.format(coll=self.my_id))]
+
+    def remove_auto(self, auto):
+        self.access.assert_can_admin_coll(self)
+
+        count = self.redis.srem(self.AUTO_KEY.format(coll=self.my_id))
+
+        if not count:
+            return False
+
+        return auto.delete_me()
 
     def create_bookmark_list(self, props):
         """Create list of bookmarks.
@@ -248,7 +292,7 @@ class Collection(PagesMixin, RedisUniqueComponent):
     def remove_list(self, blist):
         """Remove list of bookmarks from ordered list.
 
-        :param str blist: list ID
+        :param BookmarkList blist: list ID
 
         :returns: whether successful or not
         :rtype: bool
@@ -358,7 +402,23 @@ class Collection(PagesMixin, RedisUniqueComponent):
         return [key_pattern.replace('*', rec) for rec in recs]
 
     def get_warc_key(self):
-        return Recording.COLL_WARC_KEY.format(coll=self.my_id)
+        """Returns the WARC key for this collection
+
+        :return: This collections WARC key
+        :rtype: str
+        """
+        if self._warc_key is None:
+            self._warc_key = Recording.COLL_WARC_KEY.format(coll=self.my_id)
+        return self._warc_key
+
+    def get_warc_path(self, name):
+        """Returns the full path or URL to the WARC for the supplied recording name
+
+        :param str name: The recordings name
+        :return: The full path or URL to the WARC
+        :rtype: str
+        """
+        return self.redis.hget(self.get_warc_key(), name)
 
     def commit_all(self, commit_id=None):
         # see if pending commits have been finished
@@ -560,6 +620,10 @@ class Collection(PagesMixin, RedisUniqueComponent):
         for blist in self.get_lists(load=False):
             blist.delete_me()
 
+        for auto in self.get_autos():
+            if auto:
+                auto.delete_me()
+
         if storage:
             if not storage.delete_collection(self):
                 errs['error_delete_coll'] = 'not_found'
@@ -573,12 +637,15 @@ class Collection(PagesMixin, RedisUniqueComponent):
         return errs
 
     def get_storage(self):
+        if self._storage is not None:
+            return self._storage
         storage_type = self.get_prop('storage_type')
 
         if not storage_type:
             storage_type = self.DEFAULT_STORE_TYPE
 
-        return get_global_storage(storage_type, self.redis)
+        self._storage = get_global_storage(storage_type, self.redis)
+        return self._storage
 
     def get_created_iso_date(self):
         try:
@@ -609,7 +676,6 @@ class Collection(PagesMixin, RedisUniqueComponent):
             except:
                 pass
 
-        #self.redis.expire(coll_cdxj_key, self.COLL_CDXJ_TTL)
         return count
 
     def add_warcs(self, warc_map):
@@ -629,6 +695,10 @@ class Collection(PagesMixin, RedisUniqueComponent):
     def set_external(self, external):
         self.set_bool_prop('external', external)
 
+    def set_external_remove_on_expire(self):
+        key = self.EXTERNAL_KEY.format(coll=self.my_id)
+        self.redis.set(key, '1')
+
     def commit_file(self, filename, full_filename, obj_type,
                     update_key=None, update_prop=None, direct_delete=False):
 
@@ -636,6 +706,7 @@ class Collection(PagesMixin, RedisUniqueComponent):
         storage = self.get_storage()
 
         if not storage:
+            logger.debug('Skip File Commit: No Storage')
             return True
 
         orig_full_filename = full_filename
@@ -643,10 +714,12 @@ class Collection(PagesMixin, RedisUniqueComponent):
 
         # not a local filename
         if '://' in full_filename and not full_filename.startswith('local'):
+            logger.debug('Skip File Commit: Not Local Filename: {0}'.format(full_filename))
             return True
 
         if not os.path.isfile(full_filename):
-            return True
+            logger.debug('Fail File Commit: Not Found: {0}'.format(full_filename))
+            return False
 
         commit_wait = self.COMMIT_WAIT_KEY.format(filename=full_filename)
 
@@ -661,16 +734,16 @@ class Collection(PagesMixin, RedisUniqueComponent):
         # if so, finalize and delete original
         remote_url = storage.get_upload_url(filename)
         if not remote_url:
-            print('Not yet available: {0}'.format(full_filename))
+            logger.debug('File Commit: Not Yet Available: {0}'.format(full_filename))
             return False
 
-        print('Committed {0} -> {1}'.format(full_filename, remote_url))
         if update_key:
             update_prop = update_prop or filename
             self.redis.hset(update_key, update_prop, remote_url)
 
         # just in case, if remote_url is actually same as original (local file double-commit?), just return
         if remote_url == orig_full_filename:
+            logger.debug('File Already Committed: {0}'.format(remote_url))
             return True
 
         # if direct delete, call os.remove directly
@@ -679,20 +752,31 @@ class Collection(PagesMixin, RedisUniqueComponent):
             try:
                 os.remove(full_filename)
             except Exception as e:
-                print(e)
-                return True
+                traceback.print_exc()
         else:
         # for WARCs, send handle_delete to ensure writer can close the file
              if self.redis.publish('handle_delete_file', full_filename) < 1:
-                print('No Delete Listener!')
+                logger.debug('No Delete Listener!')
 
+        logger.debug('File Committed {0} -> {1}'.format(full_filename, remote_url))
         return True
+
+    def has_cdxj(self):
+        coll_cdxj_key = self.COLL_CDXJ_KEY.format(coll=self.my_id)
+        return self.redis.exists(coll_cdxj_key)
+
+    def reset_cdxj_ttl(self, key=None):
+        if not key:
+            key = self.COLL_CDXJ_KEY.format(coll=self.my_id)
+        if self.COLL_CDXJ_TTL > 0:
+            self.redis.expire(key, self.COLL_CDXJ_TTL)
+            return True
+        return False
 
     def sync_coll_index(self, exists=False, do_async=False):
         coll_cdxj_key = self.COLL_CDXJ_KEY.format(coll=self.my_id)
         if exists != self.redis.exists(coll_cdxj_key):
-            if self.COLL_CDXJ_TTL > 0:
-                self.redis.expire(coll_cdxj_key, self.COLL_CDXJ_TTL)
+            self.reset_cdxj_ttl(coll_cdxj_key)
             return
 
         cdxj_keys = self._get_rec_keys(Recording.CDXJ_KEY)
@@ -700,8 +784,7 @@ class Collection(PagesMixin, RedisUniqueComponent):
             return
 
         self.redis.zunionstore(coll_cdxj_key, cdxj_keys)
-        if self.COLL_CDXJ_TTL > 0:
-            self.redis.expire(coll_cdxj_key, self.COLL_CDXJ_TTL)
+        self.reset_cdxj_ttl(coll_cdxj_key)
 
         ges = []
         for cdxj_key in cdxj_keys:
@@ -719,15 +802,15 @@ class Collection(PagesMixin, RedisUniqueComponent):
             rec_info_key = cdxj_key.rsplit(':', 1)[0] + ':info'
             cdxj_filename = self.redis.hget(rec_info_key, self.INDEX_FILE_KEY)
             if not cdxj_filename:
-                logging.debug('No index for ' + rec_info_key)
+                logger.debug('CDX Sync: No index for ' + rec_info_key)
                 return
 
             lock_key = cdxj_key + ':_'
-            logging.debug('Downloading for {0} file {1}'.format(rec_info_key, cdxj_filename))
+            logger.debug('CDX Sync: Downloading for {0} file {1}'.format(rec_info_key, cdxj_filename))
             attempts = 0
 
-            if not self.redis.set(lock_key, 1, nx=True):
-                logging.warning('Already downloading, skipping')
+            if not self.redis.set(lock_key, 1, ex=self.COMMIT_WAIT_SECS, nx=True):
+                logger.warning('CDX Sync: Already downloading, skipping: {0}'.format(cdxj_filename))
                 lock_key = None
                 return
 
@@ -742,21 +825,18 @@ class Collection(PagesMixin, RedisUniqueComponent):
 
                     break
                 except Exception as e:
-                    import traceback
                     traceback.print_exc()
-                    logging.error('Could not load: ' + cdxj_filename)
+                    logger.error('CDX Sync: Could not load: ' + cdxj_filename)
                     attempts += 1
 
                 finally:
                     if fh:
                         fh.close()
 
-            if self.COLL_CDXJ_TTL > 0:
-                self.redis.expire(output_key, self.COLL_CDXJ_TTL)
+            self.reset_cdxj_ttl(output_key)
 
         except Exception as e:
-            logging.error('Error downloading cache: ' + str(e))
-            import traceback
+            logger.error('CDX Sync: Error downloading cache: ' + str(e))
             traceback.print_exc()
 
         finally:
@@ -767,4 +847,4 @@ class Collection(PagesMixin, RedisUniqueComponent):
 # ============================================================================
 Recording.OWNER_CLS = Collection
 BookmarkList.OWNER_CLS = Collection
-
+Auto.OWNER_CLS = Collection
